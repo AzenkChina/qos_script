@@ -1,3 +1,3 @@
 # qos_script
 
-QOS script for openwrt, iptables and tc program require.
+qos script for openwrt, iptables and tc programs is require.

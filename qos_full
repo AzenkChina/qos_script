@@ -1,0 +1,92 @@
+#! /bin/sh
+
+# 限制lan下载带宽
+
+BAND_TOTAL=4mbit
+BAND_REAL_TIME=1mbit
+BAND_HIGH_BASIC=1mbit
+BAND_MID_BASIC=1mbit
+BAND_LOW_BASIC=1mbit
+
+# 清空根队列
+tc qdisc del dev br-lan root >/dev/null 2>&1
+
+# 加一个根队列
+tc qdisc add dev br-lan root handle 1:0 htb default 13
+
+# 加一个根类
+tc class add dev br-lan parent 1:0 classid 1:1 htb rate $BAND_TOTAL prio 0
+
+# 实时类
+tc class add dev br-lan parent 1:1 classid 1:10 htb rate $BAND_REAL_TIME ceil $BAND_REAL_TIME burst 15k prio 1
+
+# 高速类
+tc class add dev br-lan parent 1:1 classid 1:11 htb rate $BAND_HIGH_BASIC ceil $BAND_TOTAL burst 15k prio 2
+
+# 中速类
+tc class add dev br-lan parent 1:1 classid 1:12 htb rate $BAND_MID_BASIC ceil $BAND_TOTAL burst 15k prio 3
+
+# 低速类
+tc class add dev br-lan parent 1:1 classid 1:13 htb rate $BAND_LOW_BASIC ceil $BAND_TOTAL burst 15k prio 4
+
+# 设置队列规则
+tc qdisc add dev br-lan parent 1:10 sfq quantum 1514b perturb 15
+tc qdisc add dev br-lan parent 1:11 sfq quantum 1514b perturb 15
+tc qdisc add dev br-lan parent 1:12 sfq quantum 1514b perturb 15
+tc qdisc add dev br-lan parent 1:13 sfq quantum 1514b perturb 15
+
+# 将队列和 fw 过滤器映射起来
+tc filter add dev br-lan parent 1:0 protocol ip prio 1 handle 1 fw classid 1:10
+tc filter add dev br-lan parent 1:0 protocol ip prio 2 handle 2 fw classid 1:11
+tc filter add dev br-lan parent 1:0 protocol ip prio 3 handle 4 fw classid 1:12
+
+
+
+
+
+
+# 防火墙QOS ROOT链
+iptables -t mangle -N QOS_ROOT
+
+# 下行报文全部进入QOS链
+iptables -t mangle -A POSTROUTING -o br-lan -j QOS_ROOT
+
+
+
+# 上行报文MARK，局域网内部转发不做QOS
+iptables -t mangle -A PREROUTING -i br-lan -j MARK --set-mark 16
+
+# 局域网内部转发不做QOS
+iptables -A QOS_ROOT -m mark --mark 16 -j RETURN
+
+
+
+# 实时任务
+iptables -A QOS_ROOT -p icmp --icmp-type any -j MARK --set-mark 1
+iptables -A QOS_ROOT -p tcp -sport 22 -j MARK --set-mark 1
+iptables -A QOS_ROOT -p tcp -sport 53 -j MARK --set-mark 1
+iptables -A QOS_ROOT -p udp -sport 53 -j MARK --set-mark 1
+
+iptables -A QOS_ROOT -m mark --mark 1 -j RETURN
+
+
+
+# 高速任务
+iptables -A QOS_ROOT -m length --length :256 -j MARK --set-mark 2
+iptables -A QOS_ROOT -p tcp -sport 80 -j MARK --set-mark 2
+iptables -A QOS_ROOT -p tcp -sport 443 -j MARK --set-mark 2
+iptables -A QOS_ROOT -p tcp -sport 8080 -j MARK --set-mark 2
+
+iptables -A QOS_ROOT -m mark --mark 2 -j RETURN
+
+
+
+# 中速任务
+iptables -A QOS_ROOT -p tcp -sport 3389 -j MARK --set-mark 4
+
+iptables -A QOS_ROOT -m mark --mark 4 -j RETURN
+
+
+
+
+# 低速任务（默认）

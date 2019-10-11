@@ -1,0 +1,57 @@
+#! /bin/sh
+
+#每分钟执行
+
+#检查输入参数
+if [ $# != 2 ]; then
+	echo "invalid input args"
+	echo "usage: limit_check {interface} {bytes}"
+	exit 1
+fi
+
+#检查输入参数
+if [ -z "`cat /proc/net/dev | grep $1": "`" ]; then
+	echo "no interface found"
+	exit 1
+fi
+
+Limit=`expr $2 + 0`
+
+#检查输入参数
+if [ $? -ne 0 ]; then
+	echo "invalid input args"
+	echo "usage: limit_check {interface} {bytes}"
+	exit 1
+fi
+
+#检查是否超限
+if [ -f "/var/log/flow_"$1"" ]; then
+	Rece=`cat /proc/net/dev | grep $1 | awk '{if(NR==1) print $2}'`
+	Trans=`cat /proc/net/dev | grep $1 | awk '{if(NR==1) print $10}'`
+
+	Rece=`expr $Rece + 0`
+	Trans=`expr $Trans + 0`
+	Current=`expr $Rece + $Trans`
+
+	Last=`cat /var/log/flow_"$1"`
+	Last=`expr $Last + 0`
+
+	if [ $Current -lt $Last ]; then
+		echo "record invalid"
+		logger -t limit_check record invalid
+		exit 1
+	fi
+
+	Inc=`expr $Current - $Last`
+
+	if [ $Inc -gt $Limit ]; then
+		uci set wireless.radio0.disabled=1
+		uci commit wireless
+		wifi
+		logger -t limit_check flow matched the upper limit, wifi disabled
+	fi
+	
+	exit 0
+else
+	exit 1
+fi

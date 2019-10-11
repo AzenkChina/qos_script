@@ -1,0 +1,18 @@
+#! /bin/sh
+
+#每天0点执行
+
+#检查输入参数
+if [ $# != 1 ]; then
+	echo "invalid input args"
+	echo "usage: limit_flush {interface}"
+	exit 1
+fi
+
+#删除记录文件
+if [ -f /var/log/flow_"$1" ]; then
+	rm /var/log/flow_"$1"
+	logger -t limit_flush flow limit flushed
+fi
+
+exit 0

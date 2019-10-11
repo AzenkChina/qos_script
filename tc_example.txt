@@ -1,0 +1,106 @@
+###############
+#! /bin/sh
+###############
+
+
+
+#TC 只能限制网卡发送数据，不限制网卡接收数据
+
+
+
+#例程1 限制总带宽
+
+#限制总上传带宽
+# 清空根队列
+tc qdisc del dev eth0.2 root >/dev/null 2>&1
+
+# 添加限制
+tc qdisc add dev eth0.2 root handle 1: tbf rate 4mbit burst 8mbit latency 50ms
+
+
+#限制总下载带宽
+# 清空根队列
+tc qdisc del dev br-lan root >/dev/null 2>&1
+
+# 添加限制
+tc qdisc add dev br-lan root handle 1: tbf rate 4mbit burst 8mbit latency 50ms
+
+
+
+
+
+#例程2 限制某一个IP上传带宽
+
+# 清空根队列
+tc qdisc del dev eth0.2 root >/dev/null 2>&1
+
+# 加一个根队列
+tc qdisc add dev eth0.2 root handle 1: htb default 1
+
+# 加一个根类
+tc class add dev eth0.2 parent 1:0 classid 1:1 htb rate 100mbit
+
+# 加一个子类用于内网 1 速率限制为 2mbit 最大 4mbit
+tc class add dev eth0.2 parent 1:1 classid 1:2 htb rate 2mbit ceil 4mbit
+
+# 设置队列规则
+tc qdisc add dev eth0.2 parent 1:2 sfq quantum 1514b perturb 15
+
+# 将队列和 fw 过滤器映射起来 其中 handle 1 的 1 是开始用 iptables 做的标记
+tc filter add dev eth0.2 parent 1:0 protocol ip prio 1 handle 1 fw classid 1:2
+
+# iptables 做标记
+iptables -I PREROUTING -t mangle -i br-lan -p tcp -s 192.168.2.160/32 -j MARK --set-mark 1
+
+
+
+
+
+#例程3 限制某一个IP下载带宽（使用U32分类器）
+
+# 清空根队列
+tc qdisc del dev br-lan root >/dev/null 2>&1
+
+# 加一个根队列
+tc qdisc add dev br-lan root handle 1: htb default 1
+
+# 加一个根类
+tc class add dev br-lan parent 1:0 classid 1:1 htb rate 100mbit
+
+# 加一个子类用于内网 1 速率限制为 2mbit 最大 4mbit
+tc class add dev br-lan parent 1:1 classid 1:2 htb rate 2mbit ceil 4mbit
+
+# 设置队列规则
+tc qdisc add dev br-lan parent 1:2 sfq quantum 1514b perturb 15
+
+# 将队列和 fw 过滤器映射起来 其中 flowid 1:2 的 2 与 classid 1:2 对应
+tc filter add dev br-lan protocol ip parent 1:0 prio 1 u32 match ip dst 192.168.2.160/32 flowid 1:2
+
+
+
+
+#例程4 限制某一个IP下载带宽（使用iptables分类器）
+
+# 清空根队列
+tc qdisc del dev br-lan root >/dev/null 2>&1
+
+# 加一个根队列
+tc qdisc add dev br-lan root handle 1: htb default 1
+
+# 加一个根类
+tc class add dev br-lan parent 1:0 classid 1:1 htb rate 100mbit
+
+# 加一个子类用于内网 1 速率限制为 2mbit 最大 4mbit
+tc class add dev br-lan parent 1:1 classid 1:2 htb rate 2mbit ceil 4mbit
+
+# 设置队列规则
+tc qdisc add dev br-lan parent 1:2 sfq quantum 1514b perturb 15
+
+# 将队列和 fw 过滤器映射起来 其中 handle 1 的 1 是开始用 iptables 做的标记
+tc filter add dev br-lan parent 1:0 protocol ip prio 1 handle 1 fw classid 1:2
+
+# iptables 做标记
+iptables -I POSTROUTING -t mangle -o br-lan -p tcp -d 192.168.2.160/32 -j MARK --set-mark 1
+
+
+

@@ -1,0 +1,43 @@
+#! /bin/sh
+
+#每分钟执行
+
+#检查输入参数
+if [ $# != 1 ]; then
+	echo "invalid input args"
+	echo "usage: limit_mark {interface}"
+	exit 1
+fi
+
+#检查记录文件
+if [ -f /var/log/flow_"$1" ]; then
+	exit 1
+fi
+
+#检查输入参数
+if [ -z "`cat /proc/net/dev | grep $1": "`" ]; then
+	echo "no interface found"
+	exit 1
+fi
+
+Rece=`cat /proc/net/dev | grep $1 | awk '{if(NR==1) print $2}'`
+Trans=`cat /proc/net/dev | grep $1 | awk '{if(NR==1) print $10}'`
+
+Rece=`expr $Rece + 0`
+Trans=`expr $Trans + 0`
+All=`expr $Rece + $Trans`
+
+#生成记录文件
+echo $All > /var/log/flow_"$1"
+
+Status=`uci get wireless.radio0.disabled`
+
+#打开wifi
+if [ $Status -eq 1 ]; then
+	uci set wireless.radio0.disabled=0
+	uci commit wireless
+	wifi
+	logger -t limit_mark wifi enabled
+fi
+
+exit 0

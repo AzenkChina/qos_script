@@ -1,0 +1,11 @@
+#! /bin/sh
+
+#WAN口新建连接限制
+
+iptables -t mangle -N speed_limit
+
+iptables -t mangle -A speed_limit -m state --state ESTABLISHED -m limit --limit 128/sec --limit-burst 50 -j RETURN
+
+iptables -t mangle -A speed_limit -j DROP
+
+iptables -t mangle -A PREROUTING -i eth0.2 -j speed_limit

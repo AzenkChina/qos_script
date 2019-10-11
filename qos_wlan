@@ -1,0 +1,55 @@
+#! /bin/sh
+
+# 限制wlan下载带宽
+
+
+DEVICE=wlan0
+
+
+BAND_TOTAL=50mbit
+BAND_HIGH_BASIC=4mbit
+BAND_MID_BASIC=4mbit
+BAND_LOW_BASIC=4mbit
+
+
+# 清空根队列
+tc qdisc del dev $DEVICE root >/dev/null 2>&1
+
+# 加一个根队列
+tc qdisc add dev $DEVICE root handle 1:0 htb default 12
+
+# 加一个根类
+tc class add dev $DEVICE parent 1:0 classid 1:1 htb rate $BAND_TOTAL prio 0
+
+# 高速类
+tc class add dev $DEVICE parent 1:1 classid 1:10 htb rate $BAND_HIGH_BASIC ceil $BAND_HIGH_BASIC burst 15k prio 1
+
+# 中速类
+tc class add dev $DEVICE parent 1:1 classid 1:11 htb rate $BAND_MID_BASIC ceil $BAND_TOTAL burst 15k prio 2
+
+# 低速类
+tc class add dev $DEVICE parent 1:1 classid 1:12 htb rate $BAND_LOW_BASIC ceil $BAND_TOTAL burst 15k prio 3
+
+# 为每个类添加随机公平队列
+tc qdisc add dev $DEVICE parent 1:10 sfq quantum 1514b perturb 15
+tc qdisc add dev $DEVICE parent 1:11 sfq quantum 1514b perturb 15
+tc qdisc add dev $DEVICE parent 1:12 sfq quantum 1514b perturb 15
+
+
+# 设置队列规则
+
+# 高速任务
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip protocol 1 0xff flowid 1:10
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 53 0xffff flowid 1:10
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 22 0xffff flowid 1:10
+
+
+# 中速任务
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 80 0xffff flowid 1:11
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 443 0xffff flowid 1:11
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 8080 0xffff flowid 1:11
+tc filter add dev $DEVICE protocol ip parent 1:0 u32 match ip sport 3389 0xffff flowid 1:11
+
+# 低速任务（默认）
+
+

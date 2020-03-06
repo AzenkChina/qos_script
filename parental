@@ -1,0 +1,34 @@
+#! /bin/sh
+
+if [ $# -eq 1 ];
+then
+	if [ $1 = "start" ];
+	then
+		tc qdisc del dev br-lan root >/dev/null 2>&1
+		tc qdisc add dev br-lan root handle 1: htb default 1
+		tc class add dev br-lan parent 1:0 classid 1:1 htb rate 1000mbit
+
+		tc class add dev br-lan parent 1:1 classid 1:2 htb rate 1mbit ceil 1mbit
+		tc class add dev br-lan parent 1:1 classid 1:3 htb rate 1mbit ceil 1mbit
+		tc class add dev br-lan parent 1:1 classid 1:4 htb rate 1mbit ceil 1mbit
+		tc class add dev br-lan parent 1:1 classid 1:5 htb rate 4mbit ceil 4mbit
+
+		tc qdisc add dev br-lan parent 1:2 sfq quantum 1514b perturb 15
+		tc qdisc add dev br-lan parent 1:3 sfq quantum 1514b perturb 15
+		tc qdisc add dev br-lan parent 1:4 sfq quantum 1514b perturb 15
+		tc qdisc add dev br-lan parent 1:5 sfq quantum 1514b perturb 15
+
+		tc filter add dev br-lan protocol ip parent 1:0 prio 1 u32 match ip dst 192.168.1.200/32 flowid 1:2
+		tc filter add dev br-lan protocol ip parent 1:0 prio 1 u32 match ip dst 192.168.1.202/32 flowid 1:3
+		tc filter add dev br-lan protocol ip parent 1:0 prio 1 u32 match ip dst 192.168.1.169/32 flowid 1:4
+		tc filter add dev br-lan protocol ip parent 1:0 prio 1 u32 match ip dst 192.168.1.160/32 flowid 1:5
+		
+		logger "Parental control started."
+	else
+		tc qdisc del dev br-lan root >/dev/null 2>&1
+		
+		logger "Parental control stopped."
+	fi
+else
+	echo "no parameter specified"
+fi
